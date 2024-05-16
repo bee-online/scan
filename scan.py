@@ -46,15 +46,15 @@ def get_os_info(ip):
 def suggest_exploitation(ip, os_info):
     print(f"Checking for vulnerabilities on {ip}...")
     vulnerabilities = []
-    if os_info['os'] == "Windows":
-        if os_info['version'] == "10":
-            if os_info['build'] == "19041":
+    if os_info.get('os') == "Windows":
+        if os_info.get('version') == "10":
+            if os_info.get('build') == "19041":
                 vulnerabilities.append("CVE-2020-0796: Windows 10 Remote Desktop Gateway RCE")
-        elif os_info['version'] == "7":
-            if os_info['build'] == "7601":
+        elif os_info.get('version') == "7":
+            if os_info.get('build') == "7601":
                 vulnerabilities.append("CVE-2019-0708: Windows 7 Remote Desktop RCE")
-    elif os_info['os'] == "Linux":
-        if os_info['kernel'] == "5.10.0-8-amd64":
+    elif os_info.get('os') == "Linux":
+        if os_info.get('kernel') == "5.10.0-8-amd64":
             vulnerabilities.append("CVE-2022-0185: Linux Kernel Heap Overflow")
     if vulnerabilities:
         print(f"Vulnerabilities found on {ip}: {', '.join(vulnerabilities)}")
