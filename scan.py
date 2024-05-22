@@ -1,75 +1,127 @@
-import os
-import socket
 import subprocess
-import platform
-from scapy.all import ARP, Ether, srp
+import re
+import os
+import threading
 
-print("Starting network scan...")
+def print_logo():
+    logo = """
+  ____                  
+ / ___|  ___ __ _ _ __  
+ \___ \ / __/ _` | '_ \ 
+  ___) | (_| (_| | | | |
+ |____/ \___\__,_|_| |_| 
+    
+    This script is built with love by Bee-Online 🐝
+    """
 
-# Task 1: Scan all devices on the network
-def scan_network():
-    print("Scanning network for devices...")
-    ip_range = "192.168.1.0/24"  # Change this to your network range
-    arp = ARP(pdst=ip_range)
-    ether = Ether(dst="ff:ff:ff:ff:ff:ff")
-    packet = ether/arp
-    result = srp(packet, timeout=3, verbose=0)[0]
-    devices = []
-    for sent, received in result:
-        devices.append({'ip': received.psrc, 'mac': received.hwsrc})
-    print(f"Found {len(devices)} devices on the network.")
-    return devices
+    print(logo)
 
-# Task 2: Get OS, version, kernel, and build version
-def get_os_info(ip):
-    print(f"Gathering OS information for {ip}...")
-    try:
-        output = subprocess.check_output(["nmap", "-O", ip])
-        output = output.decode("utf-8")
-        os_info = {}
-        for line in output.split("\n"):
-            if "OS:" in line:
-                os_info['os'] = line.split(" ")[1]
-            elif "Version:" in line:
-                os_info['version'] = line.split(" ")[1]
-            elif "Kernel:" in line:
-                os_info['kernel'] = line.split(" ")[1]
-            elif "Build:" in line:
-                os_info['build'] = line.split(" ")[1]
-        print(f"OS information gathered for {ip}: {os_info}")
-        return os_info
-    except:
-        print(f"Failed to gather OS information for {ip}")
-        return {}
+def run_netdiscover():
+    print("Running netdiscover... (press 's' to stop)\n")
+    process = subprocess.Popen(['netdiscover', '-P'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    output = []
+    
+    def read_output():
+        while True:
+            line = process.stdout.readline()
+            if line == b'' and process.poll() is not None:
+                break
+            if line:
+                decoded_line = line.decode().strip()
+                output.append(decoded_line)
+                if re.match(r"^\s*(\d+\.\d+\.\d+\.\d+)\s+([0-9A-Fa-f:]{17})", decoded_line):
+                    print(decoded_line)
+    
+    thread = threading.Thread(target=read_output)
+    thread.start()
+    
+    while thread.is_alive():
+        user_input = input()
+        if user_input.lower() == 's':
+            process.terminate()
+            break
+    
+    thread.join()
+    return '\n'.join(output)
 
-# Task 3: Suggest exploitation methods
-def suggest_exploitation(ip, os_info):
-    print(f"Checking for vulnerabilities on {ip}...")
-    vulnerabilities = []
-    if os_info.get('os') == "Windows":
-        if os_info.get('version') == "10":
-            if os_info.get('build') == "19041":
-                vulnerabilities.append("CVE-2020-0796: Windows 10 Remote Desktop Gateway RCE")
-        elif os_info.get('version') == "7":
-            if os_info.get('build') == "7601":
-                vulnerabilities.append("CVE-2019-0708: Windows 7 Remote Desktop RCE")
-    elif os_info.get('os') == "Linux":
-        if os_info.get('kernel') == "5.10.0-8-amd64":
-            vulnerabilities.append("CVE-2022-0185: Linux Kernel Heap Overflow")
-    if vulnerabilities:
-        print(f"Vulnerabilities found on {ip}: {', '.join(vulnerabilities)}")
-    else:
-        print(f"No vulnerabilities found on {ip}")
-    return vulnerabilities
+def parse_netdiscover_output(output):
+    pattern = re.compile(r"^\s*(\d+\.\d+\.\d+\.\d+)\s+([0-9A-Fa-f:]{17})", re.MULTILINE)
+    return pattern.findall(output)
 
-# Main script
-devices = scan_network()
-for device in devices:
-    ip = device['ip']
-    mac = device['mac']
-    print(f"Processing device {ip} ({mac})...")
-    os_info = get_os_info(ip)
-    if os_info:
-        suggest_exploitation(ip, os_info)
-    else:
-        print(f"Skipping device {ip} ({mac}) due to lack of OS information.")
+def run_nmap(target_ip):
+    print(f"Running nmap on {target_ip}... (press 's' to stop)\n")
+    process = subprocess.Popen(['nmap', '-sV', '-O', '--script=vuln', target_ip], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    output = []
+    
+    def read_output():
+        while True:
+            line = process.stdout.readline()
+            if line == b'' and process.poll() is not None:
+                break
+            if line:
+                decoded_line = line.decode().strip()
+                output.append(decoded_line)
+                print(decoded_line)
+    
+    thread = threading.Thread(target=read_output)
+    thread.start()
+    
+    while thread.is_alive():
+        user_input = input()
+        if user_input.lower() == 's':
+            process.terminate()
+            break
+    
+    thread.join()
+    return '\n'.join(output)
+
+def select_vulnerability(vuln_list):
+    print("Select a vulnerability to exploit:")
+    for i, vuln in enumerate(vuln_list):
+        print(f"{i + 1}: {vuln}")
+    choice = int(input("Enter the number of your choice: "))
+    return vuln_list[choice - 1]
+
+def run_metasploit(vuln):
+    os.system('clear')
+    print(f"Exploiting vulnerability: {vuln} using Metasploit...")
+    os.system(f'msfconsole -q -x "search {vuln};"')
+
+def main():
+    print_logo()
+
+    # Run netdiscover and get the results
+    netdiscover_output = run_netdiscover()
+    devices = parse_netdiscover_output(netdiscover_output)
+    
+    if not devices:
+        print("No devices found.")
+        return
+    
+    print("\nAvailable devices:")
+    for i, device in enumerate(devices):
+        print(f"{i + 1}: IP: {device[0]}, MAC: {device[1]}")
+
+    # Select a target from the list
+    choice = int(input("\nSelect a target by number: "))
+    target_ip = devices[choice - 1][0]
+
+    # Run nmap on the selected target
+    nmap_output = run_nmap(target_ip)
+    print(nmap_output)
+
+    # Extract vulnerabilities from nmap output
+    vuln_list = re.findall(r"VULNERABLE:\s+(.+)", nmap_output)
+    
+    if not vuln_list:
+        print("No vulnerabilities found.")
+        return
+    
+    # Select a vulnerability to exploit
+    selected_vuln = select_vulnerability(vuln_list)
+
+    # Run Metasploit to exploit the selected vulnerability
+    run_metasploit(selected_vuln)
+
+if __name__ == "__main__":
+    main()
